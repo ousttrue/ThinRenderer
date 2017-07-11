@@ -7,7 +7,7 @@ using namespace ThinRendererUWP;
 using namespace Microsoft::WRL;
 
 // テキスト レンダリングで使用する D2D リソースを初期化します。
-SampleFpsTextRenderer::SampleFpsTextRenderer(const std::shared_ptr<DX::DeviceResources>& deviceResources) : 
+SampleFpsTextRenderer::SampleFpsTextRenderer(const std::shared_ptr<thinr::DeviceManager>& deviceResources) : 
 	m_text(L""),
 	m_deviceResources(deviceResources)
 {
@@ -76,15 +76,15 @@ void SampleFpsTextRenderer::Update(DX::StepTimer const& timer)
 void SampleFpsTextRenderer::Render()
 {
 	ID2D1DeviceContext* context = m_deviceResources->GetD2DDeviceContext();
-	Windows::Foundation::Size logicalSize = m_deviceResources->GetLogicalSize();
+    auto logicalSize = m_deviceResources->GetLogicalSize();
 
 	context->SaveDrawingState(m_stateBlock.Get());
 	context->BeginDraw();
 
 	// 右下隅に配置
 	D2D1::Matrix3x2F screenTranslation = D2D1::Matrix3x2F::Translation(
-		logicalSize.Width - m_textMetrics.layoutWidth,
-		logicalSize.Height - m_textMetrics.height
+		logicalSize.width - m_textMetrics.layoutWidth,
+		logicalSize.height - m_textMetrics.height
 		);
 
 	context->SetTransform(screenTranslation * m_deviceResources->GetOrientationTransform2D());

@@ -10,7 +10,7 @@ namespace ThinRendererUWP
 	class Sample3DSceneRenderer
 	{
 	public:
-		Sample3DSceneRenderer(const std::shared_ptr<DX::DeviceResources>& deviceResources);
+		Sample3DSceneRenderer(const std::shared_ptr<thinr::DeviceManager>& deviceResources);
 		void CreateDeviceDependentResources();
 		void CreateWindowSizeDependentResources();
 		void ReleaseDeviceDependentResources();
@@ -27,7 +27,7 @@ namespace ThinRendererUWP
 
 	private:
 		// デバイス リソースへのキャッシュされたポインター。
-		std::shared_ptr<DX::DeviceResources> m_deviceResources;
+		std::shared_ptr<thinr::DeviceManager> m_deviceResources;
 
 		// キューブ ジオメトリの Direct3D リソース。
 		Microsoft::WRL::ComPtr<ID3D11InputLayout>	m_inputLayout;

@@ -1,7 +1,7 @@
 ﻿#include "pch.h"
 #include "Sample3DSceneRenderer.h"
-
 #include "..\Common\DirectXHelper.h"
+
 
 using namespace ThinRendererUWP;
 
@@ -9,7 +9,7 @@ using namespace DirectX;
 using namespace Windows::Foundation;
 
 // ファイルから頂点とピクセル シェーダーを読み込み、キューブのジオメトリをインスタンス化します。
-Sample3DSceneRenderer::Sample3DSceneRenderer(const std::shared_ptr<DX::DeviceResources>& deviceResources) :
+Sample3DSceneRenderer::Sample3DSceneRenderer(const std::shared_ptr<thinr::DeviceManager>& deviceResources) :
 	m_loadingComplete(false),
 	m_degreesPerSecond(45),
 	m_indexCount(0),
@@ -23,8 +23,8 @@ Sample3DSceneRenderer::Sample3DSceneRenderer(const std::shared_ptr<DX::DeviceRes
 // ウィンドウのサイズが変更されたときに、ビューのパラメーターを初期化します。
 void Sample3DSceneRenderer::CreateWindowSizeDependentResources()
 {
-	Size outputSize = m_deviceResources->GetOutputSize();
-	float aspectRatio = outputSize.Width / outputSize.Height;
+	auto outputSize = m_deviceResources->GetLogicalSize();
+	float aspectRatio = outputSize.width / outputSize.height;
 	float fovAngleY = 70.0f * XM_PI / 180.0f;
 
 	// これは、アプリケーションが縦向きビューまたはスナップ ビュー内にあるときに行うことのできる
@@ -96,7 +96,7 @@ void Sample3DSceneRenderer::TrackingUpdate(float positionX)
 {
 	if (m_tracking)
 	{
-		float radians = XM_2PI * 2.0f * positionX / m_deviceResources->GetOutputSize().Width;
+		float radians = XM_2PI * 2.0f * positionX / m_deviceResources->GetScreenViewport().Width;
 		Rotate(radians);
 	}
 }

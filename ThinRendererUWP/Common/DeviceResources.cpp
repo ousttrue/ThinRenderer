@@ -2,6 +2,7 @@
 #include "DeviceResources.h"
 #include "DirectXHelper.h"
 
+
 using namespace D2D1;
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -10,6 +11,9 @@ using namespace Windows::Graphics::Display;
 using namespace Windows::UI::Core;
 using namespace Windows::UI::Xaml::Controls;
 using namespace Platform;
+
+
+
 
 namespace DisplayMetrics
 {
@@ -66,16 +70,12 @@ namespace ScreenRotation
 
 // DeviceResources に対するコンストラクター。
 DX::DeviceResources::DeviceResources() :
-	m_screenViewport(),
-	m_d3dFeatureLevel(D3D_FEATURE_LEVEL_9_1),
 	m_d3dRenderTargetSize(),
 	m_outputSize(),
-	m_logicalSize(),
 	m_nativeOrientation(DisplayOrientations::None),
 	m_currentOrientation(DisplayOrientations::None),
-	m_dpi(-1.0f),
-	m_effectiveDpi(-1.0f),
-	m_deviceNotify(nullptr)
+	m_deviceNotify(nullptr),
+    m_effectiveDpi(-1.0f)
 {
 	CreateDeviceIndependentResources();
 	CreateDeviceResources();
@@ -84,153 +84,19 @@ DX::DeviceResources::DeviceResources() :
 // Direct3D デバイスに依存しないリソースを構成します。
 void DX::DeviceResources::CreateDeviceIndependentResources()
 {
-	// Direct2D リソースを初期化します。
-	D2D1_FACTORY_OPTIONS options;
-	ZeroMemory(&options, sizeof(D2D1_FACTORY_OPTIONS));
-
-#if defined(_DEBUG)
-	// プロジェクトがデバッグ ビルドに含まれている場合は、Direct2D デバッグを SDK レイヤーを介して有効にします。
-	options.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
-#endif
-
-	// Direct2D ファクトリを初期化します。
-	DX::ThrowIfFailed(
-		D2D1CreateFactory(
-			D2D1_FACTORY_TYPE_SINGLE_THREADED,
-			__uuidof(ID2D1Factory3),
-			&options,
-			&m_d2dFactory
-			)
-		);
-
-	// DirectWrite ファクトリを初期化します。
-	DX::ThrowIfFailed(
-		DWriteCreateFactory(
-			DWRITE_FACTORY_TYPE_SHARED,
-			__uuidof(IDWriteFactory3),
-			&m_dwriteFactory
-			)
-		);
-
-	// Windows Imaging Component (WIC) ファクトリを初期化します。
-	DX::ThrowIfFailed(
-		CoCreateInstance(
-			CLSID_WICImagingFactory2,
-			nullptr,
-			CLSCTX_INPROC_SERVER,
-			IID_PPV_ARGS(&m_wicFactory)
-			)
-		);
 }
 
 // Direct3D デバイスを構成し、このハンドルとデバイスのコンテキストを保存します。
 void DX::DeviceResources::CreateDeviceResources() 
 {
-	//このフラグは、カラー チャネルの順序が API の既定値とは異なるサーフェスのサポートを追加します。
-	// これは、Direct2D との互換性を保持するために必要です。
-	UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    m_manager = std::make_unique<thinr::DeviceManager>();
 
-#if defined(_DEBUG)
-	if (DX::SdkLayersAvailable())
-	{
-		// プロジェクトがデバッグ ビルドに含まれる場合、このフラグを使用して SDK レイヤーによるデバッグを有効にします。
-		creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
-	}
-#endif
-
-	// この配列では、このアプリケーションでサポートされる DirectX ハードウェア機能レベルのセットを定義します。
-	// 順序が保存されることに注意してください。
-	//アプリケーションの最低限必要な機能レベルをその説明で宣言することを忘れないでください。
-	//特に記載がない限り、すべてのアプリケーションは 9.1 をサポートすることが想定されます。
-	D3D_FEATURE_LEVEL featureLevels[] =
-	{
-		D3D_FEATURE_LEVEL_12_1,
-		D3D_FEATURE_LEVEL_12_0,
-		D3D_FEATURE_LEVEL_11_1,
-		D3D_FEATURE_LEVEL_11_0,
-		D3D_FEATURE_LEVEL_10_1,
-		D3D_FEATURE_LEVEL_10_0,
-		D3D_FEATURE_LEVEL_9_3,
-		D3D_FEATURE_LEVEL_9_2,
-		D3D_FEATURE_LEVEL_9_1
-	};
-
-	// Direct3D 11 API デバイス オブジェクトと、対応するコンテキストを作成します。
-	ComPtr<ID3D11Device> device;
-	ComPtr<ID3D11DeviceContext> context;
-
-	HRESULT hr = D3D11CreateDevice(
-		nullptr,					// 既定のアダプターを使用する nullptr を指定します。
-		D3D_DRIVER_TYPE_HARDWARE,	// ハードウェア グラフィックス ドライバーを使用してデバイスを作成します。
-		0,							// ドライバーが D3D_DRIVER_TYPE_SOFTWARE でない限り、0 を使用してください。
-		creationFlags,				// デバッグ フラグと Direct2D 互換性フラグを設定します。
-		featureLevels,				// このアプリがサポートできる機能レベルの一覧を表示します。
-		ARRAYSIZE(featureLevels),	// 上記リストのサイズ。
-		D3D11_SDK_VERSION,			// Windows ストア アプリでは、これには常に D3D11_SDK_VERSION を設定します。
-		&device,					// 作成された Direct3D デバイスを返します。
-		&m_d3dFeatureLevel,			// 作成されたデバイスの機能レベルを返します。
-		&context					// デバイスのイミディエイト コンテキストを返します。
-		);
-
-	if (FAILED(hr))
-	{
-		// 初期化が失敗した場合は、WARP デバイスにフォール バックします。
-		// WARP の詳細については、次を参照してください: 
-		// https://go.microsoft.com/fwlink/?LinkId=286690
-		DX::ThrowIfFailed(
-			D3D11CreateDevice(
-				nullptr,
-				D3D_DRIVER_TYPE_WARP, // ハードウェア デバイスの代わりに WARP デバイスを作成します。
-				0,
-				creationFlags,
-				featureLevels,
-				ARRAYSIZE(featureLevels),
-				D3D11_SDK_VERSION,
-				&device,
-				&m_d3dFeatureLevel,
-				&context
-				)
-			);
-	}
-
-	// Direct3D 11.3 API デバイスへのポインターとイミディエイト コンテキストを保存します。
-	DX::ThrowIfFailed(
-		device.As(&m_d3dDevice)
-		);
-
-	DX::ThrowIfFailed(
-		context.As(&m_d3dContext)
-		);
-
-	// Direct2D デバイス オブジェクトと、対応するコンテキストを作成します。
-	ComPtr<IDXGIDevice3> dxgiDevice;
-	DX::ThrowIfFailed(
-		m_d3dDevice.As(&dxgiDevice)
-		);
-
-	DX::ThrowIfFailed(
-		m_d2dFactory->CreateDevice(dxgiDevice.Get(), &m_d2dDevice)
-		);
-
-	DX::ThrowIfFailed(
-		m_d2dDevice->CreateDeviceContext(
-			D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-			&m_d2dContext
-			)
-		);
 }
 
 // これらのリソースは、ウィンドウ サイズが変更されるたびに再作成する必要があります。
 void DX::DeviceResources::CreateWindowSizeDependentResources() 
 {
-	// 前のウィンドウ サイズに固有のコンテキストをクリアします。
-	ID3D11RenderTargetView* nullViews[] = {nullptr};
-	m_d3dContext->OMSetRenderTargets(ARRAYSIZE(nullViews), nullViews, nullptr);
-	m_d3dRenderTargetView = nullptr;
-	m_d2dContext->SetTarget(nullptr);
-	m_d2dTargetBitmap = nullptr;
-	m_d3dDepthStencilView = nullptr;
-	m_d3dContext->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
+    m_manager->ClearContext();
 
 	UpdateRenderTargetSize();
 
@@ -290,7 +156,7 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 		// このシーケンスは、上の Direct3D デバイスを作成する際に使用された DXGI ファクトリを取得します。
 		ComPtr<IDXGIDevice3> dxgiDevice;
 		DX::ThrowIfFailed(
-			m_d3dDevice.As(&dxgiDevice)
+			m_manager->GetD3DDevice().As(&dxgiDevice)
 			);
 
 		ComPtr<IDXGIAdapter> dxgiAdapter;
@@ -306,7 +172,7 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 		ComPtr<IDXGISwapChain1> swapChain;
 		DX::ThrowIfFailed(
 			dxgiFactory->CreateSwapChainForCoreWindow(
-				m_d3dDevice.Get(),
+				m_manager->GetD3DDevice().Get(),
 				reinterpret_cast<IUnknown*>(m_window.Get()),
 				&swapChainDesc,
 				nullptr,
@@ -333,29 +199,30 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 	switch (displayRotation)
 	{
 	case DXGI_MODE_ROTATION_IDENTITY:
-		m_orientationTransform2D = Matrix3x2F::Identity();
-		m_orientationTransform3D = ScreenRotation::Rotation0;
+        m_manager->SetOrientationTransform(
+            Matrix3x2F::Identity(),
+            ScreenRotation::Rotation0);
 		break;
 
 	case DXGI_MODE_ROTATION_ROTATE90:
-		m_orientationTransform2D = 
-			Matrix3x2F::Rotation(90.0f) *
-			Matrix3x2F::Translation(m_logicalSize.Height, 0.0f);
-		m_orientationTransform3D = ScreenRotation::Rotation270;
+        m_manager->SetOrientationTransform(
+            Matrix3x2F::Rotation(90.0f) *
+            Matrix3x2F::Translation(m_manager->GetLogicalSize().height, 0.0f),
+            ScreenRotation::Rotation270);
 		break;
 
 	case DXGI_MODE_ROTATION_ROTATE180:
-		m_orientationTransform2D = 
-			Matrix3x2F::Rotation(180.0f) *
-			Matrix3x2F::Translation(m_logicalSize.Width, m_logicalSize.Height);
-		m_orientationTransform3D = ScreenRotation::Rotation180;
+        m_manager->SetOrientationTransform(
+            Matrix3x2F::Rotation(180.0f) *
+            Matrix3x2F::Translation(m_manager->GetLogicalSize().width, m_manager->GetLogicalSize().height),
+            ScreenRotation::Rotation180);
 		break;
 
 	case DXGI_MODE_ROTATION_ROTATE270:
-		m_orientationTransform2D = 
-			Matrix3x2F::Rotation(270.0f) *
-			Matrix3x2F::Translation(0.0f, m_logicalSize.Width);
-		m_orientationTransform3D = ScreenRotation::Rotation90;
+        m_manager->SetOrientationTransform(
+            Matrix3x2F::Rotation(270.0f) *
+            Matrix3x2F::Translation(0.0f, m_manager->GetLogicalSize().width),
+            ScreenRotation::Rotation90);
 		break;
 
 	default:
@@ -372,93 +239,21 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 		m_swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer))
 		);
 
-	DX::ThrowIfFailed(
-		m_d3dDevice->CreateRenderTargetView1(
-			backBuffer.Get(),
-			nullptr,
-			&m_d3dRenderTargetView
-			)
-		);
-
-	// 必要な場合は 3D レンダリングで使用する深度ステンシル ビューを作成します。
-	CD3D11_TEXTURE2D_DESC1 depthStencilDesc(
-		DXGI_FORMAT_D24_UNORM_S8_UINT, 
-		lround(m_d3dRenderTargetSize.Width),
-		lround(m_d3dRenderTargetSize.Height),
-		1, // この深度ステンシル ビューには、1 つのテクスチャしかありません。
-		1, // 1 つの MIPMAP レベルを使用します。
-		D3D11_BIND_DEPTH_STENCIL
-		);
-
-	ComPtr<ID3D11Texture2D1> depthStencil;
-	DX::ThrowIfFailed(
-		m_d3dDevice->CreateTexture2D1(
-			&depthStencilDesc,
-			nullptr,
-			&depthStencil
-			)
-		);
-
-	CD3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc(D3D11_DSV_DIMENSION_TEXTURE2D);
-	DX::ThrowIfFailed(
-		m_d3dDevice->CreateDepthStencilView(
-			depthStencil.Get(),
-			&depthStencilViewDesc,
-			&m_d3dDepthStencilView
-			)
-		);
-	
-	// 3D レンダリング ビューポートをウィンドウ全体をターゲットにするように設定します。
-	m_screenViewport = CD3D11_VIEWPORT(
-		0.0f,
-		0.0f,
-		m_d3dRenderTargetSize.Width,
-		m_d3dRenderTargetSize.Height
-		);
-
-	m_d3dContext->RSSetViewports(1, &m_screenViewport);
-
-	// スワップ チェーン バック バッファーに関連付けられた Direct2D ターゲット ビットマップを作成し、
-	// それを現在のターゲットとして設定します。
-	D2D1_BITMAP_PROPERTIES1 bitmapProperties = 
-		D2D1::BitmapProperties1(
-			D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-			D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-			m_dpi,
-			m_dpi
-			);
-
-	ComPtr<IDXGISurface2> dxgiBackBuffer;
-	DX::ThrowIfFailed(
-		m_swapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiBackBuffer))
-		);
-
-	DX::ThrowIfFailed(
-		m_d2dContext->CreateBitmapFromDxgiSurface(
-			dxgiBackBuffer.Get(),
-			&bitmapProperties,
-			&m_d2dTargetBitmap
-			)
-		);
-
-	m_d2dContext->SetTarget(m_d2dTargetBitmap.Get());
-	m_d2dContext->SetDpi(m_effectiveDpi, m_effectiveDpi);
-
-	// すべての Windows ストア アプリで、グレースケール テキストのアンチエイリアシングをお勧めします。
-	m_d2dContext->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    m_manager->SetBackbuffer(backBuffer);
 }
 
 // レンダー ターゲットのディメンションを決定し、それをスケール ダウンするかどうかを判断します。
 void DX::DeviceResources::UpdateRenderTargetSize()
 {
-	m_effectiveDpi = m_dpi;
+    auto dpi = m_manager->GetDpi();
+    m_effectiveDpi = dpi;
 
 	// 高解像度のデバイスのバッテリ寿命を上げるためには、より小さいレンダー ターゲットにレンダリングして
 	// 出力が提示された場合は GPU で出力をスケーリングできるようにします。
-	if (!DisplayMetrics::SupportHighResolutions && m_dpi > DisplayMetrics::DpiThreshold)
+	if (!DisplayMetrics::SupportHighResolutions && dpi > DisplayMetrics::DpiThreshold)
 	{
-		float width = DX::ConvertDipsToPixels(m_logicalSize.Width, m_dpi);
-		float height = DX::ConvertDipsToPixels(m_logicalSize.Height, m_dpi);
+		float width = DX::ConvertDipsToPixels(m_manager->GetLogicalSize().width, dpi);
+		float height = DX::ConvertDipsToPixels(m_manager->GetLogicalSize().height, dpi);
 
 		// デバイスが縦の向きの場合、高さ > 幅となります。
 		// 寸法の大きい方を幅しきい値と、小さい方を高さしきい値と
@@ -470,13 +265,16 @@ void DX::DeviceResources::UpdateRenderTargetSize()
 		}
 	}
 
+
 	// 必要なレンダリング ターゲットのサイズをピクセル単位で計算します。
-	m_outputSize.Width = DX::ConvertDipsToPixels(m_logicalSize.Width, m_effectiveDpi);
-	m_outputSize.Height = DX::ConvertDipsToPixels(m_logicalSize.Height, m_effectiveDpi);
+	m_outputSize.Width = DX::ConvertDipsToPixels(m_manager->GetLogicalSize().width, m_effectiveDpi);
+	m_outputSize.Height = DX::ConvertDipsToPixels(m_manager->GetLogicalSize().height, m_effectiveDpi);
 
 	// サイズ 0 の DirectX コンテンツが作成されることを防止します。
 	m_outputSize.Width = max(m_outputSize.Width, 1);
 	m_outputSize.Height = max(m_outputSize.Height, 1);
+
+    m_manager->SetDpi(dpi);
 }
 
 //このメソッドは、CoreWindow オブジェクトが作成 (または再作成) されるときに呼び出されます。
@@ -485,21 +283,22 @@ void DX::DeviceResources::SetWindow(CoreWindow^ window)
 	DisplayInformation^ currentDisplayInformation = DisplayInformation::GetForCurrentView();
 
 	m_window = window;
-	m_logicalSize = Windows::Foundation::Size(window->Bounds.Width, window->Bounds.Height);
+    m_manager->SetLogicalSize(D2D1::SizeF(window->Bounds.Width, window->Bounds.Height));
 	m_nativeOrientation = currentDisplayInformation->NativeOrientation;
 	m_currentOrientation = currentDisplayInformation->CurrentOrientation;
-	m_dpi = currentDisplayInformation->LogicalDpi;
-	m_d2dContext->SetDpi(m_dpi, m_dpi);
+	auto dpi = currentDisplayInformation->LogicalDpi;
+    m_manager->SetDpi(dpi);
 
 	CreateWindowSizeDependentResources();
 }
 
 // このメソッドは、SizeChanged イベント用のイベント ハンドラーの中で呼び出されます。
-void DX::DeviceResources::SetLogicalSize(Windows::Foundation::Size logicalSize)
+void DX::DeviceResources::SetLogicalSize(Windows::Foundation::Size _logicalSize)
 {
-	if (m_logicalSize != logicalSize)
+    auto logicalSize = D2D1::SizeF(_logicalSize.Width, _logicalSize.Height);
+	if (m_manager->GetLogicalSize().width != logicalSize.width || m_manager->GetLogicalSize().height != logicalSize.height)
 	{
-		m_logicalSize = logicalSize;
+		m_manager->SetLogicalSize(logicalSize);
 		CreateWindowSizeDependentResources();
 	}
 }
@@ -507,14 +306,13 @@ void DX::DeviceResources::SetLogicalSize(Windows::Foundation::Size logicalSize)
 // このメソッドは、DpiChanged イベント用のイベント ハンドラーの中で呼び出されます。
 void DX::DeviceResources::SetDpi(float dpi)
 {
-	if (dpi != m_dpi)
+	if (dpi != m_manager->GetDpi())
 	{
-		m_dpi = dpi;
-
 		// ディスプレイ DPI の変更時に、ウィンドウの論理サイズ (Dip 単位) も変更されるため、更新する必要があります。
-		m_logicalSize = Windows::Foundation::Size(m_window->Bounds.Width, m_window->Bounds.Height);
+		m_manager->SetLogicalSize(D2D1::SizeF(m_window->Bounds.Width, m_window->Bounds.Height));
 
-		m_d2dContext->SetDpi(m_dpi, m_dpi);
+        m_manager->SetDpi(dpi);
+
 		CreateWindowSizeDependentResources();
 	}
 }
@@ -538,7 +336,7 @@ void DX::DeviceResources::ValidateDevice()
 	// まず、デバイスが作成された時点から、既定のアダプターに関する情報を取得します。
 
 	ComPtr<IDXGIDevice3> dxgiDevice;
-	DX::ThrowIfFailed(m_d3dDevice.As(&dxgiDevice));
+	DX::ThrowIfFailed(m_manager->GetD3DDevice().As(&dxgiDevice));
 
 	ComPtr<IDXGIAdapter> deviceAdapter;
 	DX::ThrowIfFailed(dxgiDevice->GetAdapter(&deviceAdapter));
@@ -568,7 +366,7 @@ void DX::DeviceResources::ValidateDevice()
 
 	if (previousDesc.AdapterLuid.LowPart != currentDesc.AdapterLuid.LowPart ||
 		previousDesc.AdapterLuid.HighPart != currentDesc.AdapterLuid.HighPart ||
-		FAILED(m_d3dDevice->GetDeviceRemovedReason()))
+		FAILED(m_manager->GetD3DDevice()->GetDeviceRemovedReason()))
 	{
 		// 古いデバイスに関連したリソースへの参照を解放します。
 		dxgiDevice = nullptr;
@@ -591,8 +389,9 @@ void DX::DeviceResources::HandleDeviceLost()
 		m_deviceNotify->OnDeviceLost();
 	}
 
-	CreateDeviceResources();
-	m_d2dContext->SetDpi(m_dpi, m_dpi);
+    auto dpi = m_manager->GetDpi();
+    CreateDeviceResources();
+    m_manager->SetDpi(dpi);
 	CreateWindowSizeDependentResources();
 
 	if (m_deviceNotify != nullptr)
@@ -612,7 +411,7 @@ void DX::DeviceResources::RegisterDeviceNotify(DX::IDeviceNotify* deviceNotify)
 void DX::DeviceResources::Trim()
 {
 	ComPtr<IDXGIDevice3> dxgiDevice;
-	m_d3dDevice.As(&dxgiDevice);
+	m_manager->GetD3DDevice().As(&dxgiDevice);
 
 	dxgiDevice->Trim();
 }
@@ -626,13 +425,8 @@ void DX::DeviceResources::Present()
 	DXGI_PRESENT_PARAMETERS parameters = { 0 };
 	HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
 
-	// レンダリング ターゲットのコンテンツを破棄します。
-	//この操作は、既存のコンテンツ全体が上書きされる場合のみ有効です。
-	// dirty rect または scroll rect を使用する場合は、この呼び出しを削除する必要があります。
-	m_d3dContext->DiscardView1(m_d3dRenderTargetView.Get(), nullptr, 0);
+    m_manager->DiscardView();
 
-	// 深度ステンシルのコンテンツを破棄します。
-	m_d3dContext->DiscardView1(m_d3dDepthStencilView.Get(), nullptr, 0);
 
 	//デバイスが切断またはドライバーの更新によって削除された場合は、
 	// すべてのデバイス リソースを再作成する必要があります。

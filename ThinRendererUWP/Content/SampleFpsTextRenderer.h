@@ -10,7 +10,7 @@ namespace ThinRendererUWP
 	class SampleFpsTextRenderer
 	{
 	public:
-		SampleFpsTextRenderer(const std::shared_ptr<DX::DeviceResources>& deviceResources);
+		SampleFpsTextRenderer(const std::shared_ptr<thinr::DeviceManager>& deviceResources);
 		void CreateDeviceDependentResources();
 		void ReleaseDeviceDependentResources();
 		void Update(DX::StepTimer const& timer);
@@ -18,7 +18,7 @@ namespace ThinRendererUWP
 
 	private:
 		// デバイス リソースへのキャッシュされたポインター。
-		std::shared_ptr<DX::DeviceResources> m_deviceResources;
+		std::shared_ptr<thinr::DeviceManager> m_deviceResources;
 
 		// テキスト レンダリングに関連するリソース。
 		std::wstring                                    m_text;

@@ -2,6 +2,7 @@
 #include "ThinRendererUWPMain.h"
 #include "Common\DirectXHelper.h"
 
+
 using namespace ThinRendererUWP;
 using namespace Windows::Foundation;
 using namespace Windows::System::Threading;
@@ -15,9 +16,9 @@ ThinRendererUWPMain::ThinRendererUWPMain(const std::shared_ptr<DX::DeviceResourc
 	m_deviceResources->RegisterDeviceNotify(this);
 
 	// TODO: これをアプリのコンテンツの初期化で置き換えます。
-	m_sceneRenderer = std::unique_ptr<Sample3DSceneRenderer>(new Sample3DSceneRenderer(m_deviceResources));
+	m_sceneRenderer = std::unique_ptr<Sample3DSceneRenderer>(new Sample3DSceneRenderer(m_deviceResources->GetManager()));
 
-	m_fpsTextRenderer = std::unique_ptr<SampleFpsTextRenderer>(new SampleFpsTextRenderer(m_deviceResources));
+	m_fpsTextRenderer = std::unique_ptr<SampleFpsTextRenderer>(new SampleFpsTextRenderer(m_deviceResources->GetManager()));
 
 	// TODO: 既定の可変タイムステップ モード以外のモードが必要な場合は、タイマー設定を変更してください。
 	// 例: 60 FPS 固定タイムステップ更新ロジックでは、次を呼び出します:
@@ -62,19 +63,19 @@ bool ThinRendererUWPMain::Render()
 		return false;
 	}
 
-	auto context = m_deviceResources->GetD3DDeviceContext();
+	auto context = m_deviceResources->GetManager()->GetD3DDeviceContext();
 
 	// ビューポートをリセットして全画面をターゲットとします。
-	auto viewport = m_deviceResources->GetScreenViewport();
+	auto viewport = m_deviceResources->GetManager()->GetScreenViewport();
 	context->RSSetViewports(1, &viewport);
 
 	// レンダリング ターゲットを画面にリセットします。
-	ID3D11RenderTargetView *const targets[1] = { m_deviceResources->GetBackBufferRenderTargetView() };
-	context->OMSetRenderTargets(1, targets, m_deviceResources->GetDepthStencilView());
+	ID3D11RenderTargetView *const targets[1] = { m_deviceResources->GetManager()->GetBackBufferRenderTargetView() };
+	context->OMSetRenderTargets(1, targets, m_deviceResources->GetManager()->GetDepthStencilView());
 
 	// バック バッファーと深度ステンシル ビューをクリアします。
-	context->ClearRenderTargetView(m_deviceResources->GetBackBufferRenderTargetView(), DirectX::Colors::CornflowerBlue);
-	context->ClearDepthStencilView(m_deviceResources->GetDepthStencilView(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+	context->ClearRenderTargetView(m_deviceResources->GetManager()->GetBackBufferRenderTargetView(), DirectX::Colors::CornflowerBlue);
+	context->ClearDepthStencilView(m_deviceResources->GetManager()->GetDepthStencilView(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	// シーン オブジェクトをレンダリングします。
 	// TODO: これをアプリのコンテンツのレンダリング関数で置き換えます。
